@@ -1,18 +1,16 @@
 from fastapi import FastAPI, HTTPException, Query
 from databases import Database
 from pydantic import BaseModel
-from typing import Annotated
+from typing import Annotated # пароль для mdatabase myuser:1234
 
-DATABASE_URL = "postgresql://myuser:1234@localhost/mtdatabase"
+DATABASE_URL = "postgresql://myuser:1234@localhost/TODOS"
 
 database = Database(DATABASE_URL)
 
 class TodoCreate(BaseModel):
 
     title : str
-
     descriptions : str = None
-
     completed : bool = False
 
 
@@ -31,10 +29,18 @@ app = FastAPI(lifespan=lifespan)
 @app.get("/todos")
 async def read_todos(
     limit : Annotated[int, Query(ge=1, le=100)] = 10,
-    offset: Annotated[int, Query(ge=0)] = 0
+    offset: Annotated[int, Query(ge=0)] = 0,
+    sort_by : Annotated[str, Query()] = "id"
 ):
-    query = '''SELECT * FROM todos ORDER BY id LIMIT :limit OFFSET :offset'''
+    if sort_by.startswith('-'):
+        field = sort_by[1:]
+        order = "DESC"
+    else:
+        field = sort_by
+        order = "ASC"
+    query = f'''SELECT * FROM tasks ORDER BY {field} {order} LIMIT :limit OFFSET :offset'''
     values = {
+        #"sort_by":sort_by,
         "limit":limit,
         "offset":offset
     }
@@ -61,13 +67,11 @@ async def read_todos(
 
 @app.post("/todos/{user_id}")
 
-async def create_todo(user_id : int,todo : TodoCreate):
+async def create_todo(todo : TodoCreate):
 
-    query = '''INSERT INTO todos(title, descriptions, compelted, user_id) VALUES (:title, :descriptions, :completed, :user_id) RETURNING id'''
+    query = '''INSERT INTO tasks(title, descriptions, compelted) VALUES (:title, :descriptions, :completed) RETURNING id'''
 
-    values = {**todo.model_dump(),
-
-        "user_id":user_id}
+    values = {**todo.model_dump()}
     try:
 
         result = await database.execute(
@@ -76,10 +80,12 @@ async def create_todo(user_id : int,todo : TodoCreate):
 
      )
 
-        return "Пользователь сохранен"
+        return {"Пользователь сохранен":result}
 
     except Exception as e:
         raise HTTPException(
         status_code=500,
         detail=f"Ошибка при создании заметки {str(e)}"
         )
+    
+# поправить поля created, добавить нормальную валидацию даты и расчет времени 
