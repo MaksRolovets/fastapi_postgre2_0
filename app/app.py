@@ -40,7 +40,6 @@ async def read_todos(
         order = "ASC"
     query = f'''SELECT * FROM tasks ORDER BY {field} {order} LIMIT :limit OFFSET :offset'''
     values = {
-        #"sort_by":sort_by,
         "limit":limit,
         "offset":offset
     }
@@ -89,3 +88,11 @@ async def create_todo(todo : TodoCreate):
         )
     
 # поправить поля created, добавить нормальную валидацию даты и расчет времени 
+'''SELECT 
+  ROUND(AVG(EXTRACT(EPOCH FROM (completed_at - created_at)) / 3600), 2) AS avg_completion_time_hours
+FROM tasks
+WHERE completed = true
+  AND completed_at IS NOT NULL
+  AND created_at IS NOT NULL
+  AND completed_at > created_at;''' # расчет среднего времени
+  # добавить эндроинт putch
