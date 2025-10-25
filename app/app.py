@@ -87,6 +87,45 @@ async def create_todo(todo : TodoCreate):
         detail=f"Ошибка при создании заметки {str(e)}"
         )
     
+@app.patch("/todos")
+async def update_todo(
+    ids : Annotated[str, Query(..., description="ID задач через запятую: 1,2,3")],
+    completed : Annotated[bool, Query(..., descriptions = "Статус выполнения")]):
+    try:
+         id_list = [int(id.strip()) for id in ids.split(',')]
+    except:
+        HTTPException(status_code=500, detail="Пизда данным, введи их нормально!")
+
+    query = '''UPDATE tasks SET completed = :completed,
+                                completed_at = CASE 
+                                    WHEN :completed = true THEN NOW()::timestamp(0)
+                                    ELSE NULL
+                            END 
+                        WHERE id = ANY(:id_list) RETURNING id'''
+    values = {
+        "completed":completed,
+        "id_list":id_list
+}   
+    try:
+        result = await database.fetch_all(
+            query=query,
+            values=values
+        )
+
+        if not result:
+            raise HTTPException(
+                status_code=404,
+                detail="ну это ни в какие рамки"
+            )
+        return result
+    except HTTPException:
+        raise
+    except Exception as e :
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка получения пользоватедя {str(e)}"
+            )
+    
 # поправить поля created, добавить нормальную валидацию даты и расчет времени 
 '''SELECT 
   ROUND(AVG(EXTRACT(EPOCH FROM (completed_at - created_at)) / 3600), 2) AS avg_completion_time_hours
