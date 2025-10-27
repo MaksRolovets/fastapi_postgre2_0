@@ -1,7 +1,8 @@
 from fastapi import FastAPI, HTTPException, Query
 from databases import Database
 from pydantic import BaseModel
-from typing import Annotated # пароль для mdatabase myuser:1234
+from datetime import date
+from typing import Annotated, Optional # пароль для mdatabase myuser:1234
 
 DATABASE_URL = "postgresql://myuser:1234@localhost/TODOS"
 
@@ -30,7 +31,11 @@ app = FastAPI(lifespan=lifespan)
 async def read_todos(
     limit : Annotated[int, Query(ge=1, le=100)] = 10,
     offset: Annotated[int, Query(ge=0)] = 0,
-    sort_by : Annotated[str, Query()] = "id"
+    sort_by : Annotated[Optional[str], Query()] = "id",
+    completed : Optional[bool] = None,
+    created_after : Optional[date] = None,
+    created_before : Optional[date] = None,
+    title_contains : Optional[str] = None
 ):
     if sort_by.startswith('-'):
         field = sort_by[1:]
@@ -38,11 +43,34 @@ async def read_todos(
     else:
         field = sort_by
         order = "ASC"
-    query = f'''SELECT * FROM tasks ORDER BY {field} {order} LIMIT :limit OFFSET :offset'''
+    query = f'''SELECT * FROM tasks'''
+    conditions = []
     values = {
         "limit":limit,
         "offset":offset
     }
+
+    if completed is not None:
+        conditions.append("completed = :completed")
+        values["completed"] = completed
+
+    if created_after:
+        conditions.append("created_at >= :created_after")
+        values["created_after"] = created_after
+
+    if created_before:
+        conditions.append("created_at <= :created_before")
+        values["created_before"] = created_before
+
+    if title_contains:
+        conditions.append("title ILIKE :title_contains")
+        values["title_contains"] = f"%{title_contains}%"
+
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+        
+    query += f" ORDER BY {field} {order} LIMIT :limit OFFSET :offset"
+
     try:
         result = await database.fetch_all(
             query=query,
