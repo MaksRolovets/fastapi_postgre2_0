@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Query
 from databases import Database
 from pydantic import BaseModel
 from datetime import date
+from time import time
 from typing import Annotated, Optional # пароль для mdatabase myuser:1234
 
 DATABASE_URL = "postgresql://myuser:1234@localhost/TODOS"
@@ -91,6 +92,47 @@ async def read_todos(
             detail=f"Ошибка получения пользоватедя {str(e)}"
             )
 
+@app.get("/todos/analytis")
+async def analytics():
+    start_time = time()
+    query1 = '''SELECT 
+    COUNT(*) as total_tasks,
+    COUNT(*) FILTER (WHERE completed = true) as completed_true,
+    COUNT(*) FILTER (WHERE completed = false) as completed_false,
+    COALESCE(ROUND(
+        AVG(CASE
+            WHEN completed = true 
+            AND completed_at IS NOT NULL 
+            AND created_at IS NOT NULL 
+            AND completed_at > created_at
+            THEN EXTRACT(EPOCH FROM (completed_at - created_at)) / 3600
+            ELSE NULL  -- важно для AVG
+        END), 
+        2
+    ), 0) AS avg_completion_time_hours
+FROM tasks;
+    '''
+    query2 = """
+    SELECT 
+        TRIM(TO_CHAR(created_at AT TIME ZONE :timezone, 'Day')) as day_name,
+        COUNT(*) as day_count
+    FROM tasks 
+    GROUP BY TRIM(TO_CHAR(created_at AT TIME ZONE :timezone, 'Day'))
+    """
+
+
+    try:
+        stats = await database.fetch_one(query1)
+        days_data = await database.fetch_all(query=query2, values={"timezone":"Europe/Moscow"})
+        end_time = (time() - start_time) * 1000
+        print(end_time)
+        weekday_distribution = {row["day_name"]: row["day_count"] for row in days_data}
+        return {"stats":stats, "days_data":days_data, "weekday":weekday_distribution}
+    except Exception as e:
+        raise HTTPException(
+        status_code=500,
+        detail=f"Ошибка при вызове аналитики {str(e)}"
+        )
 
 @app.post("/todos/{user_id}")
 
